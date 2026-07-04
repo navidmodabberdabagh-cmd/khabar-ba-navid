@@ -1,1 +1,63 @@
+name: khabar-ba-navid
 
+on:
+  schedule:
+    - cron: "0 5 * * *"
+    - cron: "0 8 * * *"
+    - cron: "0 10 * * *"
+    - cron: "0 13 * * *"
+    - cron: "0 17 * * *"
+    - cron: "0 19 * * *"
+    - cron: "0 21 * * *"
+    - cron: "0 23 * * *"
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: install requirements
+        run: pip install -r requirements.txt
+
+      - name: download fonts
+        run: |
+          mkdir -p fonts
+          curl -sL -o fonts/Vazirmatn-Regular.ttf "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Regular.ttf"
+          curl -sL -o fonts/Vazirmatn-Bold.ttf "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Bold.ttf"
+
+      - name: set duration
+        id: duration
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 23 * * *"|"0 0 * * *")
+              echo "seconds=900" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "seconds=1700" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: run bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_DURATION_SECONDS: ${{ steps.duration.outputs.seconds }}
+        run: python bot.py
+
+      - name: save sent ids
+        run: |
+          git config user.name "khabar-ba-navid-bot"
+          git config user.email "actions@github.com"
+          git add sent_ids.json || true
+          git commit -m "update sent ids" || echo "nothing to commit"
+          git push || echo "nothing to push"

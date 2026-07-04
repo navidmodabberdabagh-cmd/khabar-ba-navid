@@ -1,0 +1,6 @@
+feedparser
+requests
+Pillow
+deep-translator
+arabic_reshaper
+python-bidi

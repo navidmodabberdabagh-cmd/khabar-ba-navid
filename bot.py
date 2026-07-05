@@ -2,8 +2,10 @@
 """خبر با نوید - ربات خبری تلگرام"""
 import os, re, json, time, hashlib, random, feedparser, requests
 from datetime import datetime
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from deep_translator import GoogleTranslator
+import arabic_reshaper
+from bidi.algorithm import get_display
 from sources import RSS_FEEDS, KEYWORDS
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -15,9 +17,12 @@ CHECK_INTERVAL_SECONDS = 90
 FONT_BOLD = "fonts/Vazirmatn-Bold.ttf"
 FONT_REGULAR = "fonts/Vazirmatn-Regular.ttf"
 IMG_WIDTH, IMG_HEIGHT = 1080, 1920
-BANNER_HEIGHT, FOOTER_HEIGHT, PADDING = 180, 80, 50
+PADDING = 55
 HIGH_RANKING_COUNTRIES = ["آمریکا", "فرانسه", "آلمان", "اسپانیا", "اسرائیل", "امارات", "قطر", "عربستان", "پاکستان", "ترکیه", "ترامپ", "بایدن", "ماکرون", "شولتز", "نتانیاهو"]
 IMPORTANT_TOPICS = {"مهاجرت": ["مهاجرت", "ویزا", "اقامت", "اداره مهاجرت", "پناجران", "پناهندگی"], "رضا پهلوی": ["رضا پهلوی", "شاهزاده", "پهلوی"], "ترامپ_ایران": ["ترامپ", "تحریم ایران", "آمریکا ایران"]}
+
+def load_font(path, size):
+    return ImageFont.truetype(path, size, layout_engine=ImageFont.Layout.BASIC)
 
 def load_sent_ids():
     if os.path.exists(SENT_IDS_FILE):
@@ -50,9 +55,15 @@ def clean_text(text):
         text = text.replace("  ", " ")
     return text.strip()
 
+def shape_text(text):
+    reshaped = arabic_reshaper.reshape(text)
+    return get_display(reshaped)
+
 def apply_replacements(text, original_text):
     text = re.sub(r"(آیت\s*الله|امام)?\s*خامنه\s*ای", "خامنه‌ای", text)
     text = re.sub(r"(آیت\s*الله|امام)?\s*خمینی", "خمینی", text)
+    text = text.replace("رهبر شهید", "جسد خامنه‌ای")
+    text = text.replace("جمهوری اسلامی ایران", "جمهوری اسلامی")
     has_high_ranking = any(country.lower() in original_text.lower() for country in HIGH_RANKING_COUNTRIES)
     if not has_high_ranking:
         text = re.sub(r"آیت\s*الله\s+(\w+)", r"آقای \1", text)
@@ -73,7 +84,8 @@ def wrap_text(text, font, max_width, draw):
     current = ""
     for word in words:
         test = (current + " " + word).strip()
-        w = draw.textlength(test, font=font, direction="rtl")
+        shaped = shape_text(test)
+        w = draw.textlength(shaped, font=font)
         if w <= max_width:
             current = test
         else:
@@ -84,54 +96,78 @@ def wrap_text(text, font, max_width, draw):
         lines.append(current)
     return lines
 
+def draw_right_line(draw, text, font, y, fill, width):
+    shaped = shape_text(text)
+    tw = draw.textlength(shaped, font=font)
+    draw.text((width - PADDING - tw, y), shaped, font=font, fill=fill)
+
 def make_background(width, height):
-    img = Image.new("RGB", (width, height), "white")
+    img = Image.new("RGB", (width, height), "#FFFDF7")
     overlay = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
-    colors = [(0, 150, 80, 22), (200, 30, 30, 18), (120, 0, 150, 18), (230, 190, 0, 20)]
-    for c in colors:
+    blobs = [(20, 140, 90, 55), (200, 40, 40, 45), (110, 20, 150, 40), (225, 180, 20, 50)]
+    for c in blobs:
         x = random.randint(0, width)
         y = random.randint(0, height)
-        r = random.randint(int(width * 0.35), int(width * 0.65))
+        r = random.randint(int(width * 0.30), int(width * 0.60))
         draw.ellipse([x - r, y - r, x + r, y + r], fill=c)
+    overlay = overlay.filter(ImageFilter.GaussianBlur(60))
     img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
     return img
 
-def make_image(source_name, persian_text, important_topic=None):
+def draw_frame(draw, width, height):
+    shades = ["#5C4210", "#B8860B", "#E8C158", "#FFDE7A", "#E8C158", "#B8860B"]
+    for i, color in enumerate(shades):
+        draw.rectangle([i * 3, i * 3, width - 1 - i * 3, height - 1 - i * 3], outline=color, width=3)
+
+def make_image(source_name, headline_fa, body_fa, important_topic=None):
     source_name = clean_text(source_name)
-    persian_text = clean_text(persian_text)
-    dummy_img = Image.new("RGB", (10, 10))
-    draw = ImageDraw.Draw(dummy_img)
-    body_font = ImageFont.truetype(FONT_REGULAR, 42)
-    banner_font = ImageFont.truetype(FONT_BOLD, 58)
-    footer_font = ImageFont.truetype(FONT_REGULAR, 28)
-    important_font = ImageFont.truetype(FONT_BOLD, 72)
-    max_text_width = IMG_WIDTH - 2 * PADDING
-    lines = wrap_text(persian_text, body_font, max_text_width, draw)
-    line_height = 60
-    body_height = len(lines) * line_height + 2 * PADDING
-    total_height = max(BANNER_HEIGHT + body_height + FOOTER_HEIGHT, IMG_HEIGHT)
+    headline_fa = clean_text(headline_fa)
+    body_fa = clean_text(body_fa)
+
+    dummy = Image.new("RGB", (10, 10))
+    d = ImageDraw.Draw(dummy)
+
+    source_font = load_font(FONT_BOLD, 50)
+    headline_font = load_font(FONT_BOLD, 46)
+    body_font = load_font(FONT_REGULAR, 40)
+    footer_font = load_font(FONT_BOLD, 40)
+    important_font = load_font(FONT_BOLD, 70)
+
+    max_w = IMG_WIDTH - 2 * PADDING
+    headline_lines = wrap_text(headline_fa, headline_font, max_w, d)
+    body_lines = wrap_text(body_fa, body_font, max_w, d)
+
+    top_area = PADDING + 62 + 10 + len(headline_lines) * 58 + 20
+    body_height = len(body_lines) * 58
+    footer_height = 100
+    total_height = max(top_area + body_height + footer_height, IMG_HEIGHT)
 
     img = make_background(IMG_WIDTH, total_height)
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle([0, 0, IMG_WIDTH, BANNER_HEIGHT], fill="#C8102E")
-    sw = draw.textlength(source_name, font=banner_font, direction="rtl")
-    draw.text((IMG_WIDTH - PADDING - sw, (BANNER_HEIGHT - 58) / 2), source_name, font=banner_font, fill="white", direction="rtl")
+    y = PADDING
+    draw_right_line(draw, source_name, source_font, y, "#111111", IMG_WIDTH)
+    y += 62 + 10
 
-    y = BANNER_HEIGHT + PADDING
-    for line in lines:
-        lw = draw.textlength(line, font=body_font, direction="rtl")
-        draw.text((IMG_WIDTH - PADDING - lw, y), line, font=body_font, fill="black", direction="rtl")
-        y += line_height
+    for line in headline_lines:
+        draw_right_line(draw, line, headline_font, y, "#0B7A3D", IMG_WIDTH)
+        y += 58
+    y += 20
 
-    fw = draw.textlength("خبر با نوید", font=footer_font, direction="rtl")
-    draw.text(((IMG_WIDTH - fw) / 2, total_height - FOOTER_HEIGHT + 15), "خبر با نوید", font=footer_font, fill="#555555", direction="rtl")
+    for line in body_lines:
+        draw_right_line(draw, line, body_font, y, "#1A1A1A", IMG_WIDTH)
+        y += 58
+
+    footer_text = "خبر با نوید"
+    shaped_footer = shape_text(footer_text)
+    fw = draw.textlength(shaped_footer, font=footer_font)
+    draw.text(((IMG_WIDTH - fw) / 2, total_height - footer_height + 25), shaped_footer, font=footer_font, fill="#00695C")
 
     if important_topic:
-        draw.text((IMG_WIDTH - 100, 20), "⚠️", font=important_font, fill="#FFD700")
+        draw.text((IMG_WIDTH - 110, 25), "⚠️", font=important_font, fill="#C8102E")
 
-    draw.rectangle([4, 4, IMG_WIDTH - 5, total_height - 5], outline="#D4AF37", width=6)
+    draw_frame(draw, IMG_WIDTH, total_height)
 
     path = "temp_news.jpg"
     img.save(path, quality=92)
@@ -161,14 +197,18 @@ def fetch_and_process(sent_ids):
             eid = item_id(entry)
             if eid in sent_ids or not is_relevant(entry):
                 continue
-            title = entry.get("title", "")
-            summary = re.sub("<[^<]+?>", "", entry.get("summary", ""))[:400]
-            original_text = clean_text(f"{title}. {summary}")
-            persian_text = translate_to_persian(original_text)
-            persian_text = clean_text(persian_text)
-            persian_text = apply_replacements(persian_text, original_text)
-            important_topic = detect_important_topic(original_text + " " + persian_text)
-            img_path = make_image(source_name, persian_text, important_topic)
+            title = clean_text(entry.get("title", ""))
+            summary = clean_text(re.sub("<[^<]+?>", "", entry.get("summary", "")))[:400]
+            original_full = f"{title}. {summary}"
+
+            headline_fa = clean_text(translate_to_persian(title))
+            body_fa = clean_text(translate_to_persian(summary)) if summary else ""
+
+            headline_fa = apply_replacements(headline_fa, original_full)
+            body_fa = apply_replacements(body_fa, original_full)
+
+            important_topic = detect_important_topic(original_full + " " + headline_fa + " " + body_fa)
+            img_path = make_image(source_name, headline_fa, body_fa, important_topic)
             ok = send_photo(img_path, caption=entry.get("link", ""))
             if ok:
                 sent_ids.add(eid)

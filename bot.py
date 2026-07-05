@@ -13,7 +13,7 @@ OWNER_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 SENT_IDS_FILE = "sent_ids.json"
 CHAT_IDS_FILE = "chat_ids.json"
 OFFSET_FILE = "update_offset.json"
-MAX_SEND_PER_RUN = 6
+MAX_SEND_PER_RUN = 1000
 RUN_DURATION_SECONDS = int(os.environ.get("RUN_DURATION_SECONDS", "1500"))
 CHECK_INTERVAL_SECONDS = 90
 FONT_BOLD = "fonts/Vazirmatn-Bold.ttf"
@@ -340,8 +340,9 @@ def fetch_and_process(sent_ids, chat_ids):
             if ok:
                 sent_ids.add(eid)
                 sent_count += 1
+                save_json_set(SENT_IDS_FILE, sent_ids)
                 print(f"ارسال شد: {source_name} -> {title[:50]}")
-            time.sleep(2)
+            time.sleep(3)
     return sent_ids
 
 

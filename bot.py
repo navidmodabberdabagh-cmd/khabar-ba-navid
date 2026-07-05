@@ -46,6 +46,12 @@ def translate_to_persian(text):
     except:
         return text
 
+def clean_text(text):
+    text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    while "  " in text:
+        text = text.replace("  ", " ")
+    return text.strip()
+
 def shape_persian(text):
     reshaped = arabic_reshaper.reshape(text)
     return get_display(reshaped)
@@ -85,6 +91,8 @@ def wrap_text(text, font, max_width, draw):
     return lines
 
 def make_image(source_name, persian_text, important_topic=None):
+    source_name = clean_text(source_name)
+    persian_text = clean_text(persian_text)
     dummy_img = Image.new("RGB", (10, 10))
     draw = ImageDraw.Draw(dummy_img)
     body_font = ImageFont.truetype(FONT_REGULAR, 42)
@@ -143,8 +151,9 @@ def fetch_and_process(sent_ids):
                 continue
             title = entry.get("title", "")
             summary = re.sub("<[^<]+?>", "", entry.get("summary", ""))[:400]
-            original_text = f"{title}. {summary}".strip()
+            original_text = clean_text(f"{title}. {summary}")
             persian_text = translate_to_persian(original_text)
+            persian_text = clean_text(persian_text)
             persian_text = apply_replacements(persian_text, original_text)
             important_topic = detect_important_topic(original_text + " " + persian_text)
             img_path = make_image(source_name, persian_text, important_topic)

@@ -1,63 +1,61 @@
-name: khabar-ba-navid
+name: خبر با نوید
 
 on:
   schedule:
-    - cron: "0 5 * * *"
-    - cron: "0 8 * * *"
-    - cron: "0 10 * * *"
-    - cron: "0 13 * * *"
-    - cron: "0 17 * * *"
-    - cron: "0 19 * * *"
-    - cron: "0 21 * * *"
-    - cron: "0 23 * * *"
-    - cron: "0 0 * * *"
-  workflow_dispatch: {}
+    # همه ساعت‌ها به وقت UTC هستند (معادل ساعت ترکیه منهای ۳ ساعت)
+    - cron: "0 5 * * *"   # 08:00 استانبول (۳۰ دقیقه)
+    - cron: "0 8 * * *"   # 11:00 استانبول (۳۰ دقیقه)
+    - cron: "0 10 * * *"  # 13:00 استانبول (۳۰ دقیقه)
+    - cron: "0 13 * * *"  # 16:00 استانبول (۳۰ دقیقه)
+    - cron: "0 17 * * *"  # 20:00 استانبول (۳۰ دقیقه)
+    - cron: "0 19 * * *"  # 22:00 استانبول (۳۰ دقیقه)
+    - cron: "0 21 * * *"  # 00:00 استانبول (۳۰ دقیقه)
+    - cron: "0 23 * * *"  # 02:00 استانبول (۱۵ دقیقه)
+    - cron: "0 0 * * *"   # 03:00 استانبول (۱۵ دقیقه)
+  workflow_dispatch: {}   # امکان اجرای دستی برای تست
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: checkout
+      - name: دریافت کد از مخزن
         uses: actions/checkout@v4
 
-      - name: setup python
+      - name: نصب پایتون
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: install requirements
+      - name: نصب کتابخانه‌ها
         run: pip install -r requirements.txt
 
-      - name: download fonts
+      - name: دانلود فونت فارسی (رایگان و متن‌باز)
         run: |
           mkdir -p fonts
           curl -sL -o fonts/Vazirmatn-Regular.ttf "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Regular.ttf"
           curl -sL -o fonts/Vazirmatn-Bold.ttf "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Bold.ttf"
 
-      - name: set duration
+      - name: تعیین مدت زمان اجرا بر اساس ساعت
         id: duration
         run: |
-          case "${{ github.event.schedule }}" in
-            "0 23 * * *"|"0 0 * * *")
-              echo "seconds=900" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "seconds=1700" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
+          if [ "${{ github.event.schedule }}" == "0 23 * * *" ] || [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
+            echo "seconds=900" >> "$GITHUB_OUTPUT"
+          else
+            echo "seconds=1700" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: run bot
+      - name: اجرای ربات
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RUN_DURATION_SECONDS: ${{ steps.duration.outputs.seconds }}
         run: python bot.py
 
-      - name: save sent ids
+      - name: ذخیره لیست خبرهای ارسال‌شده (جلوگیری از تکرار)
         run: |
           git config user.name "khabar-ba-navid-bot"
           git config user.email "actions@github.com"
           git add sent_ids.json || true
-          git commit -m "update sent ids" || echo "nothing to commit"
-          git push || echo "nothing to push"
+          git commit -m "بروزرسانی لیست اخبار ارسال‌شده" || echo "چیزی برای ثبت نبود"
+          git push || echo "چیزی برای پوش نبود"

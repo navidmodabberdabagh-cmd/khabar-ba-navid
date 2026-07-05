@@ -16,6 +16,7 @@ OFFSET_FILE = "update_offset.json"
 MAX_SEND_PER_RUN = 1000
 RUN_DURATION_SECONDS = int(os.environ.get("RUN_DURATION_SECONDS", "1500"))
 CHECK_INTERVAL_SECONDS = 90
+FEED_TIMEOUT = 10
 FONT_BOLD = "fonts/Vazirmatn-Bold.ttf"
 FONT_REGULAR = "fonts/Vazirmatn-Regular.ttf"
 IMG_WIDTH, IMG_HEIGHT = 1080, 1920
@@ -202,23 +203,32 @@ def make_marble_background(width, height):
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     gold_tones = [(212, 175, 55), (184, 134, 11), (245, 222, 179)]
-    for _ in range(18):
+    vein_count = random.randint(10, 28)
+    base_angle_bias = random.choice(["horizontal", "vertical", "diagonal"])
+    for _ in range(vein_count):
         x, y = random.randint(0, width), random.randint(0, height)
         pts = [(x, y)]
         for _ in range(5):
-            x += random.randint(-150, 150)
-            y += random.randint(80, 180)
+            if base_angle_bias == "horizontal":
+                x += random.randint(-220, 220)
+                y += random.randint(20, 60)
+            elif base_angle_bias == "vertical":
+                x += random.randint(-40, 40)
+                y += random.randint(60, 200)
+            else:
+                x += random.randint(-160, 160)
+                y += random.randint(60, 180)
             pts.append((x, y))
         color = random.choice(gold_tones)
-        alpha = random.randint(35, 75)
-        draw.line(pts, fill=color + (alpha,), width=random.randint(1, 3))
-    overlay = overlay.filter(ImageFilter.GaussianBlur(2))
+        alpha = random.randint(25, 85)
+        draw.line(pts, fill=color + (alpha,), width=random.randint(1, 4))
+    overlay = overlay.filter(ImageFilter.GaussianBlur(random.uniform(1.2, 2.8)))
     img = Image.alpha_composite(base.convert("RGBA"), overlay)
     light = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     ld = ImageDraw.Draw(light)
-    lx, ly = int(width * 0.25), int(height * 0.12)
-    r = int(width * 0.65)
-    ld.ellipse([lx - r, ly - r, lx + r, ly + r], fill=(255, 255, 255, 22))
+    lx, ly = random.randint(int(width * 0.1), int(width * 0.5)), random.randint(int(height * 0.05), int(height * 0.25))
+    r = int(width * random.uniform(0.5, 0.75))
+    ld.ellipse([lx - r, ly - r, lx + r, ly + r], fill=(255, 255, 255, random.randint(15, 28)))
     light = light.filter(ImageFilter.GaussianBlur(150))
     img = Image.alpha_composite(img, light).convert("RGB")
     return img
@@ -251,6 +261,7 @@ def make_image(source_name, headline_fa, body_fa, important_topic, halo_color):
     headline_font = load_font(FONT_BOLD, 46)
     body_font = load_font(FONT_REGULAR, 40)
     footer_font = load_font(FONT_BOLD, 42)
+    insta_font = load_font(FONT_REGULAR, 32)
 
     max_w = IMG_WIDTH - 2 * PADDING
     headline_lines = wrap_text(headline_fa, headline_font, max_w, d)
@@ -258,7 +269,7 @@ def make_image(source_name, headline_fa, body_fa, important_topic, halo_color):
 
     top_area = BANNER_HEIGHT + 50 + len(headline_lines) * 62 + 25
     body_height = len(body_lines) * 60
-    footer_height = 110
+    footer_height = 150
     total_height = max(top_area + body_height + footer_height, IMG_HEIGHT)
 
     img = make_marble_background(IMG_WIDTH, total_height).convert("RGBA")
@@ -281,7 +292,11 @@ def make_image(source_name, headline_fa, body_fa, important_topic, halo_color):
 
     shaped_footer = shape_text("خبر با نوید")
     fw = draw.textlength(shaped_footer, font=footer_font)
-    draw.text(((IMG_WIDTH - fw) / 2, total_height - footer_height + 30), shaped_footer, font=footer_font, fill=(0, 150, 136, 255))
+    draw.text(((IMG_WIDTH - fw) / 2, total_height - footer_height + 15), shaped_footer, font=footer_font, fill=(0, 150, 136, 255))
+
+    insta_text = "Instagram : @NM_EST"
+    iw = draw.textlength(insta_text, font=insta_font)
+    draw.text(((IMG_WIDTH - iw) / 2, total_height - footer_height + 65), insta_text, font=insta_font, fill=(180, 180, 180, 255))
 
     if important_topic or halo_color:
         draw_alert_icon(img, draw, IMG_WIDTH - 100, BANNER_HEIGHT + 80, halo_color)
@@ -292,7 +307,7 @@ def make_image(source_name, headline_fa, body_fa, important_topic, halo_color):
     return path
 
 
-def send_photo_to_all(chat_ids, image_path, caption):
+def send_photo_to_all(chat_ids, image_path, caption=""):
     ok_any = False
     for cid in chat_ids:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -305,15 +320,22 @@ def send_photo_to_all(chat_ids, image_path, caption):
     return ok_any
 
 
+def fetch_feed_safe(feed_url):
+    try:
+        resp = requests.get(feed_url, timeout=FEED_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
+        return feedparser.parse(resp.content)
+    except Exception as e:
+        print(f"خطا در دریافت {feed_url}: {e}")
+        return None
+
+
 def fetch_and_process(sent_ids, chat_ids):
     sent_count = 0
     for source_name, feed_url in RSS_FEEDS.items():
         if sent_count >= MAX_SEND_PER_RUN:
             break
-        try:
-            feed = feedparser.parse(feed_url)
-        except Exception as e:
-            print(f"خطا در {source_name}: {e}")
+        feed = fetch_feed_safe(feed_url)
+        if not feed or not getattr(feed, "entries", None):
             continue
         for entry in feed.entries[:15]:
             if sent_count >= MAX_SEND_PER_RUN:
@@ -336,7 +358,8 @@ def fetch_and_process(sent_ids, chat_ids):
             has_halo, halo_color = detect_halo(full_check)
 
             img_path = make_image(source_name, headline_fa, body_fa, important_topic or has_halo, halo_color)
-            ok = send_photo_to_all(chat_ids, img_path, entry.get("link", ""))
+            caption_text = f"{headline_fa}\n\n{body_fa}\n\nInstagram: @NM_EST" if body_fa else f"{headline_fa}\n\nInstagram: @NM_EST"
+            ok = send_photo_to_all(chat_ids, img_path, caption_text)
             if ok:
                 sent_ids.add(eid)
                 sent_count += 1
@@ -358,7 +381,6 @@ def main():
         chat_ids = poll_new_starters(chat_ids)
         save_json_set(CHAT_IDS_FILE, chat_ids)
         sent_ids = fetch_and_process(sent_ids, chat_ids)
-        save_json_set(SENT_IDS_FILE, sent_ids)
         time.sleep(CHECK_INTERVAL_SECONDS)
     print("پایان اجرا.")
 

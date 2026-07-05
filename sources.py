@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 RSS_FEEDS = {
-    "BBC فارسی": "https://feeds.bbci.co.uk/persian/rss.xml",
+    "ایران اینترنشنال": "https://www.iranintl.com/fa/rss",
+    "ایسنا": "https://www.isna.ir/rss",
+    "ایرنا": "https://www.irna.ir/rss",
     "یورونیوز فارسی": "https://parsi.euronews.com/rss",
     "العربیه فارسی": "https://farsi.alarabiya.net/rss.xml",
     "Al Jazeera English": "https://www.aljazeera.com/xml/rss/all.xml",

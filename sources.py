@@ -26,6 +26,13 @@ RSS_FEEDS = {
     "Nikkei Asia": "https://asia.nikkei.com/rss/feed/nar",
     "South China Morning Post": "https://www.scmp.com/rss/91/feed",
     "ABC News Australia": "https://www.abc.net.au/news/feed/51120/rss.xml",
+    "Science Daily": "https://www.sciencedaily.com/rss/health_medicine.xml",
+    "Medical Xpress": "https://medicalxpress.com/rss-feed/",
+    "BBC Sport Football": "https://feeds.bbci.co.uk/sport/football/rss.xml",
+    "Fox News": "https://moxie.foxnews.com/google-publisher/latest.xml",
+    "Fox News World": "https://moxie.foxnews.com/google-publisher/world.xml",
+    "EU Home Affairs": "https://home-affairs.ec.europa.eu/rss_en",
+    "GOV UK Home Office": "https://www.gov.uk/government/organisations/home-office.atom",
 }
 
 KEYWORDS = [
@@ -40,4 +47,13 @@ KEYWORDS = [
     "iran sanctions", "تحریم ایران", "migration", "مهاجرت",
     "رضا پهلوی", "pahlavi",
     "بورس", "stock market", "oil price", "نفت برنت", "borsa",
+    "cancer treatment", "درمان سرطان", "cancer cure", "immunotherapy",
+    "desalination", "آب شیرین‌سازی", "water technology",
+    "world cup", "جام جهانی", "gulf cup", "لیگ خلیج فارس", "team melli",
+    "istanbul weather", "هوای استانبول", "بارش شدید", "هشدار زرد",
+    "heatwave", "موج گرما", "cold wave", "موج سرما", "heavy snow", "برف سنگین",
+    "flood warning", "هشدار سیل", "تبریز", "شیراز", "اصفهان", "کرمان",
+    "بندرعباس", "کردستان", "گیلان", "مازندران",
+    "visa", "ویزا", "residence permit", "اقامت", "immigration law", "قانون مهاجرت",
+    "asylum", "پناهندگی", "deportation", "اخراج مهاجران",
 ]

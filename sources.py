@@ -39,4 +39,5 @@ KEYWORDS = [
     "iran football", "فوتبال ایران", "iran economy", "اقتصاد ایران",
     "iran sanctions", "تحریم ایران", "migration", "مهاجرت",
     "رضا پهلوی", "pahlavi",
+    "بورس", "stock market", "oil price", "نفت برنت", "borsa",
 ]

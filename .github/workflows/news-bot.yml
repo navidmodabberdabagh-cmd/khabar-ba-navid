@@ -2,22 +2,21 @@ name: خبر با نوید
 
 on:
   schedule:
-    # همه ساعت‌ها به وقت UTC هستند (معادل ساعت ترکیه منهای ۳ ساعت)
-    - cron: "0 5 * * *"   # 08:00 استانبول (۳۰ دقیقه)
-    - cron: "0 8 * * *"   # 11:00 استانبول (۳۰ دقیقه)
-    - cron: "0 10 * * *"  # 13:00 استانبول (۳۰ دقیقه)
-    - cron: "0 13 * * *"  # 16:00 استانبول (۳۰ دقیقه)
-    - cron: "0 17 * * *"  # 20:00 استانبول (۳۰ دقیقه)
-    - cron: "0 19 * * *"  # 22:00 استانبول (۳۰ دقیقه)
-    - cron: "0 21 * * *"  # 00:00 استانبول (۳۰ دقیقه)
-    - cron: "0 23 * * *"  # 02:00 استانبول (۱۵ دقیقه)
-    - cron: "0 0 * * *"   # 03:00 استانبول (۱۵ دقیقه)
-  workflow_dispatch: {}   # امکان اجرای دستی برای تست
+    - cron: "0 5 * * *"
+    - cron: "0 8 * * *"
+    - cron: "0 10 * * *"
+    - cron: "0 13 * * *"
+    - cron: "0 17 * * *"
+    - cron: "0 19 * * *"
+    - cron: "0 21 * * *"
+    - cron: "0 23 * * *"
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 33
     steps:
       - name: دریافت کد از مخزن
         uses: actions/checkout@v4
@@ -42,7 +41,7 @@ jobs:
           if [ "${{ github.event.schedule }}" == "0 23 * * *" ] || [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
             echo "seconds=900" >> "$GITHUB_OUTPUT"
           else
-            echo "seconds=1700" >> "$GITHUB_OUTPUT"
+            echo "seconds=1800" >> "$GITHUB_OUTPUT"
           fi
 
       - name: اجرای ربات

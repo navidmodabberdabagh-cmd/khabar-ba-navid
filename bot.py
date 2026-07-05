@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 """خبر با نوید - ربات خبری تلگرام"""
-import os, re, json, time, hashlib, feedparser, requests
+import os, re, json, time, hashlib, random, feedparser, requests
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 from deep_translator import GoogleTranslator
-import arabic_reshaper
-from bidi.algorithm import get_display
 from sources import RSS_FEEDS, KEYWORDS
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -52,10 +50,6 @@ def clean_text(text):
         text = text.replace("  ", " ")
     return text.strip()
 
-def shape_persian(text):
-    reshaped = arabic_reshaper.reshape(text)
-    return get_display(reshaped)
-
 def apply_replacements(text, original_text):
     text = re.sub(r"(آیت\s*الله|امام)?\s*خامنه\s*ای", "خامنه‌ای", text)
     text = re.sub(r"(آیت\s*الله|امام)?\s*خمینی", "خمینی", text)
@@ -79,7 +73,7 @@ def wrap_text(text, font, max_width, draw):
     current = ""
     for word in words:
         test = (current + " " + word).strip()
-        w = draw.textlength(shape_persian(test), font=font)
+        w = draw.textlength(test, font=font, direction="rtl")
         if w <= max_width:
             current = test
         else:
@@ -89,6 +83,19 @@ def wrap_text(text, font, max_width, draw):
     if current:
         lines.append(current)
     return lines
+
+def make_background(width, height):
+    img = Image.new("RGB", (width, height), "white")
+    overlay = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+    colors = [(0, 150, 80, 22), (200, 30, 30, 18), (120, 0, 150, 18), (230, 190, 0, 20)]
+    for c in colors:
+        x = random.randint(0, width)
+        y = random.randint(0, height)
+        r = random.randint(int(width * 0.35), int(width * 0.65))
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=c)
+    img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+    return img
 
 def make_image(source_name, persian_text, important_topic=None):
     source_name = clean_text(source_name)
@@ -104,25 +111,30 @@ def make_image(source_name, persian_text, important_topic=None):
     line_height = 60
     body_height = len(lines) * line_height + 2 * PADDING
     total_height = max(BANNER_HEIGHT + body_height + FOOTER_HEIGHT, IMG_HEIGHT)
-    img = Image.new("RGB", (IMG_WIDTH, total_height), "white")
+
+    img = make_background(IMG_WIDTH, total_height)
     draw = ImageDraw.Draw(img)
+
     draw.rectangle([0, 0, IMG_WIDTH, BANNER_HEIGHT], fill="#C8102E")
-    source_shaped = shape_persian(source_name)
-    sw = draw.textlength(source_shaped, font=banner_font)
-    draw.text(((IMG_WIDTH - sw) / 2, (BANNER_HEIGHT - 58) / 2), source_shaped, font=banner_font, fill="white")
+    sw = draw.textlength(source_name, font=banner_font, direction="rtl")
+    draw.text((IMG_WIDTH - PADDING - sw, (BANNER_HEIGHT - 58) / 2), source_name, font=banner_font, fill="white", direction="rtl")
+
     y = BANNER_HEIGHT + PADDING
     for line in lines:
-        shaped = shape_persian(line)
-        lw = draw.textlength(shaped, font=body_font)
-        draw.text((IMG_WIDTH - PADDING - lw, y), shaped, font=body_font, fill="black")
+        lw = draw.textlength(line, font=body_font, direction="rtl")
+        draw.text((IMG_WIDTH - PADDING - lw, y), line, font=body_font, fill="black", direction="rtl")
         y += line_height
-    footer_text = shape_persian("خبر با نوید")
-    fw = draw.textlength(footer_text, font=footer_font)
-    draw.text(((IMG_WIDTH - fw) / 2, total_height - FOOTER_HEIGHT + 15), footer_text, font=footer_font, fill="#888888")
+
+    fw = draw.textlength("خبر با نوید", font=footer_font, direction="rtl")
+    draw.text(((IMG_WIDTH - fw) / 2, total_height - FOOTER_HEIGHT + 15), "خبر با نوید", font=footer_font, fill="#555555", direction="rtl")
+
     if important_topic:
-        draw.text((IMG_WIDTH - 100, 20), "⚠️", font=important_font, fill="#C8102E")
+        draw.text((IMG_WIDTH - 100, 20), "⚠️", font=important_font, fill="#FFD700")
+
+    draw.rectangle([4, 4, IMG_WIDTH - 5, total_height - 5], outline="#D4AF37", width=6)
+
     path = "temp_news.jpg"
-    img.save(path, quality=90)
+    img.save(path, quality=92)
     return path
 
 def send_photo(image_path, caption=""):

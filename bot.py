@@ -19,11 +19,7 @@ FONT_REGULAR = "fonts/Vazirmatn-Regular.ttf"
 IMG_WIDTH, IMG_HEIGHT = 1080, 1920
 BANNER_HEIGHT, FOOTER_HEIGHT, PADDING = 180, 80, 50
 HIGH_RANKING_COUNTRIES = ["آمریکا", "فرانسه", "آلمان", "اسپانیا", "اسرائیل", "امارات", "قطر", "عربستان", "پاکستان", "ترکیه", "ترامپ", "بایدن", "ماکرون", "شولتز", "نتانیاهو"]
-IMPORTANT_TOPICS = {
-    "مهاجرت": ["مهاجرت", "ویزا", "اقامت", "اداره مهاجرت", "پناجران", "پناهندگی"],
-    "رضا پهلوی": ["رضا پهلوی", "شاهزاده", "پهلوی"],
-    "ترامپ_ایران": ["ترامپ", "تحریم ایران", "آمریکا ایران"]
-}
+IMPORTANT_TOPICS = {"مهاجرت": ["مهاجرت", "ویزا", "اقامت", "اداره مهاجرت", "پناجران", "پناهندگی"], "رضا پهلوی": ["رضا پهلوی", "شاهزاده", "پهلوی"], "ترامپ_ایران": ["ترامپ", "تحریم ایران", "آمریکا ایران"]}
 
 def load_sent_ids():
     if os.path.exists(SENT_IDS_FILE):
@@ -126,7 +122,7 @@ def send_photo(image_path, caption=""):
     with open(image_path, "rb") as photo:
         resp = requests.post(url, data={"chat_id": CHAT_ID, "caption": caption}, files={"photo": photo})
     if not resp.ok:
-        print(f"خطا در ارسال: {resp.text}")
+        print(f"خطا: {resp.text}")
     return resp.ok
 
 def fetch_and_process(sent_ids):

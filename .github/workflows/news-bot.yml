@@ -57,5 +57,7 @@ jobs:
           git config user.name "khabar-ba-navid-bot"
           git config user.email "actions@github.com"
           git add sent_ids.json || true
+          git add chat_ids.json || true
+          git add update_offset.json || true
           git commit -m "بروزرسانی لیست اخبار ارسال‌شده" || echo "چیزی برای ثبت نبود"
           git push || echo "چیزی برای پوش نبود"

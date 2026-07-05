@@ -2,6 +2,8 @@
 """خبر با نوید - ربات خبری تلگرام"""
 import os, re, json, time, hashlib, random, feedparser, requests
 from datetime import datetime
+import socket
+socket.setdefaulttimeout(15)
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from deep_translator import GoogleTranslator
 import arabic_reshaper

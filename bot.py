@@ -19,6 +19,7 @@ RUN_DURATION_SECONDS = int(os.environ.get("RUN_DURATION_SECONDS", "1500"))
 CHECK_INTERVAL_SECONDS = 60
 FEED_TIMEOUT = 10
 TRANSLATE_TIMEOUT = 12
+SUMMARY_MAX_CHARS = 900
 FONT_BOLD = "fonts/Vazirmatn-Bold.ttf"
 FONT_REGULAR = "fonts/Vazirmatn-Regular.ttf"
 IMG_WIDTH, IMG_HEIGHT = 1080, 1920
@@ -213,11 +214,11 @@ def draw_center_line(draw, text, font, y, fill, stroke_fill, width):
 
 
 def make_marble_background(width, height):
-    base = Image.new("RGB", (width, height), (12, 12, 12))
+    base = Image.new("RGB", (width, height), (10, 10, 10))
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    gold_tones = [(212, 175, 55), (184, 134, 11), (245, 222, 179)]
-    vein_count = random.randint(10, 28)
+    gold_tones = [(255, 215, 0), (212, 175, 55), (255, 230, 150)]
+    vein_count = random.randint(14, 30)
     base_angle_bias = random.choice(["horizontal", "vertical", "diagonal"])
     for _ in range(vein_count):
         x, y = random.randint(0, width), random.randint(0, height)
@@ -234,17 +235,20 @@ def make_marble_background(width, height):
                 y += random.randint(60, 180)
             pts.append((x, y))
         color = random.choice(gold_tones)
-        alpha = random.randint(25, 85)
+        alpha = random.randint(35, 110)
         draw.line(pts, fill=color + (alpha,), width=random.randint(1, 4))
-    overlay = overlay.filter(ImageFilter.GaussianBlur(random.uniform(1.2, 2.8)))
+    overlay = overlay.filter(ImageFilter.GaussianBlur(random.uniform(1.0, 2.2)))
     img = Image.alpha_composite(base.convert("RGBA"), overlay)
-    light = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(light)
-    lx, ly = random.randint(int(width * 0.1), int(width * 0.5)), random.randint(int(height * 0.05), int(height * 0.25))
-    r = int(width * random.uniform(0.5, 0.75))
-    ld.ellipse([lx - r, ly - r, lx + r, ly + r], fill=(255, 255, 255, random.randint(15, 28)))
-    light = light.filter(ImageFilter.GaussianBlur(150))
-    img = Image.alpha_composite(img, light).convert("RGB")
+
+    shine = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shine)
+    for _ in range(4):
+        sx = random.randint(0, width)
+        sy = random.randint(0, height)
+        sr = random.randint(int(width * 0.15), int(width * 0.4))
+        sd.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=(255, 255, 255, random.randint(10, 22)))
+    shine = shine.filter(ImageFilter.GaussianBlur(120))
+    img = Image.alpha_composite(img, shine).convert("RGB")
     return img
 
 
@@ -261,6 +265,13 @@ def draw_alert_icon(img, draw, x_center, y_center, halo_rgba):
     excl_font = load_font(FONT_BOLD, 55)
     tw = draw.textlength("!", font=excl_font)
     draw.text((x_center - tw / 2, y_center - 32), "!", font=excl_font, fill="white")
+
+
+def draw_corner_sparkle(draw, width, height):
+    corners = [(20, 20), (width - 20, 20), (20, height - 20), (width - 20, height - 20)]
+    for cx, cy in corners:
+        for r, alpha in [(14, 200), (24, 100), (34, 50)]:
+            draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(255, 240, 180, alpha), width=2)
 
 
 def make_image(source_name, headline_fa, body_fa, important_topic, halo_color):
@@ -313,7 +324,9 @@ def make_image(source_name, headline_fa, body_fa, important_topic, halo_color):
     draw.text(((IMG_WIDTH - iw) / 2, total_height - footer_height + 65), insta_text, font=insta_font, fill=(180, 180, 180, 255))
 
     if important_topic or halo_color:
-        draw_alert_icon(img, draw, IMG_WIDTH - 100, BANNER_HEIGHT + 80, halo_color)
+        draw_alert_icon(img, draw, 100, BANNER_HEIGHT + 60, halo_color)
+
+    draw_corner_sparkle(draw, IMG_WIDTH, total_height)
 
     img = img.convert("RGB")
     path = "temp_news.jpg"
@@ -345,11 +358,11 @@ def _do_fetch(feed_url):
 def fetch_feed_safe(feed_url):
     result = run_with_timeout(_do_fetch, (feed_url,), FEED_TIMEOUT + 5, default=None)
     if result is None:
-        print(f"⛔ فید ناموفق (تایم‌اوت یا خطا): {feed_url}")
+        print(f"⛔ فید ناموفق: {feed_url}")
     elif not getattr(result, "entries", None):
-        print(f"⚠️ فید خالی (بدون خبر): {feed_url}")
+        print(f"⚠️ فید خالی: {feed_url}")
     else:
-        print(f"✅ فید موفق: {feed_url} -> {len(result.entries)} خبر دریافت شد")
+        print(f"✅ فید موفق: {feed_url} -> {len(result.entries)} خبر")
     return result
 
 
@@ -361,8 +374,6 @@ def fetch_and_process(sent_ids, chat_ids, deadline):
         feed = fetch_feed_safe(feed_url)
         if not feed or not getattr(feed, "entries", None):
             continue
-        matched = sum(1 for e in feed.entries[:15] if is_relevant(e))
-        print(f"📊 منبع «{source_name}»: از {len(feed.entries)} خبر، {matched} مورد با کلمات کلیدی مرتبط بود")
         for entry in feed.entries[:15]:
             if sent_count >= MAX_SEND_PER_RUN or time.time() > deadline:
                 break
@@ -370,7 +381,7 @@ def fetch_and_process(sent_ids, chat_ids, deadline):
             if eid in sent_ids or not is_relevant(entry):
                 continue
             title = clean_text(entry.get("title", ""))
-            summary = clean_text(re.sub("<[^<]+?>", "", entry.get("summary", "")))[:400]
+            summary = clean_text(re.sub("<[^<]+?>", "", entry.get("summary", "")))[:SUMMARY_MAX_CHARS]
             original_full = f"{title}. {summary}"
 
             headline_fa = clean_text(translate_to_persian(title))
@@ -393,6 +404,8 @@ def fetch_and_process(sent_ids, chat_ids, deadline):
                 sent_count += 1
                 save_json_set(SENT_IDS_FILE, sent_ids)
                 print(f"ارسال شد: {source_name} -> {title[:50]}")
+            else:
+                print(f"⚠️ ارسال ناموفق برای: {source_name} -> {title[:50]}")
             time.sleep(2)
     return sent_ids
 
@@ -403,12 +416,16 @@ def main():
         print("لطفاً TELEGRAM_BOT_TOKEN را تنظیم کنید.")
         return
     chat_ids = load_json_set(CHAT_IDS_FILE, [OWNER_CHAT_ID])
+    if OWNER_CHAT_ID:
+        chat_ids.add(str(OWNER_CHAT_ID))
+    print(f"تعداد کاربران فعلی: {len(chat_ids)} -> {chat_ids}")
     sent_ids = load_json_set(SENT_IDS_FILE, [])
-    print(f"تعداد کاربران فعلی: {len(chat_ids)}")
     start = time.time()
     hard_deadline = start + RUN_DURATION_SECONDS
     while time.time() - start < RUN_DURATION_SECONDS:
         chat_ids = poll_new_starters(chat_ids)
+        if OWNER_CHAT_ID:
+            chat_ids.add(str(OWNER_CHAT_ID))
         save_json_set(CHAT_IDS_FILE, chat_ids)
         sent_ids = fetch_and_process(sent_ids, chat_ids, hard_deadline)
         print(f"⏳ یک دور کامل تمام شد، {int(hard_deadline - time.time())} ثانیه باقی مانده")

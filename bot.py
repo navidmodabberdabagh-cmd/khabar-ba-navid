@@ -385,8 +385,8 @@ def fetch_and_process(sent_ids, chat_ids, deadline):
 
             img_path = make_image(source_name, headline_fa, body_fa, important_topic or has_halo, halo_color)
             caption_text = f"{headline_fa}\n\n{body_fa}\n\nInstagram: @NM_EST" if body_fa else f"{headline_fa}\n\nInstagram: @NM_EST"
-if len(caption_text) > 1000:
-    caption_text = caption_text[:1000] + "…"
+            if len(caption_text) > 1000:
+                caption_text = caption_text[:1000] + "…"
             ok = send_photo_to_all(chat_ids, img_path, caption_text)
             if ok:
                 sent_ids.add(eid)

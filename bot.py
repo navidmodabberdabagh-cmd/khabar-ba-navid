@@ -343,7 +343,14 @@ def _do_fetch(feed_url):
 
 
 def fetch_feed_safe(feed_url):
-    return run_with_timeout(_do_fetch, (feed_url,), FEED_TIMEOUT + 5, default=None)
+    result = run_with_timeout(_do_fetch, (feed_url,), FEED_TIMEOUT + 5, default=None)
+    if result is None:
+        print(f"⛔ فید ناموفق (تایم‌اوت یا خطا): {feed_url}")
+    elif not getattr(result, "entries", None):
+        print(f"⚠️ فید خالی (بدون خبر): {feed_url}")
+    else:
+        print(f"✅ فید موفق: {feed_url} -> {len(result.entries)} خبر دریافت شد")
+    return result
 
 
 def fetch_and_process(sent_ids, chat_ids, deadline):
@@ -354,6 +361,8 @@ def fetch_and_process(sent_ids, chat_ids, deadline):
         feed = fetch_feed_safe(feed_url)
         if not feed or not getattr(feed, "entries", None):
             continue
+        matched = sum(1 for e in feed.entries[:15] if is_relevant(e))
+        print(f"📊 منبع «{source_name}»: از {len(feed.entries)} خبر، {matched} مورد با کلمات کلیدی مرتبط بود")
         for entry in feed.entries[:15]:
             if sent_count >= MAX_SEND_PER_RUN or time.time() > deadline:
                 break
@@ -393,12 +402,14 @@ def main():
         return
     chat_ids = load_json_set(CHAT_IDS_FILE, [OWNER_CHAT_ID])
     sent_ids = load_json_set(SENT_IDS_FILE, [])
+    print(f"تعداد کاربران فعلی: {len(chat_ids)}")
     start = time.time()
     hard_deadline = start + RUN_DURATION_SECONDS
     while time.time() - start < RUN_DURATION_SECONDS:
         chat_ids = poll_new_starters(chat_ids)
         save_json_set(CHAT_IDS_FILE, chat_ids)
         sent_ids = fetch_and_process(sent_ids, chat_ids, hard_deadline)
+        print(f"⏳ یک دور کامل تمام شد، {int(hard_deadline - time.time())} ثانیه باقی مانده")
         time.sleep(CHECK_INTERVAL_SECONDS)
     print("پایان اجرا.")
 

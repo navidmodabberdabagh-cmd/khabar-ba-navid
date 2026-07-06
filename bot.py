@@ -2,8 +2,7 @@
 """خبر با نوید - ربات خبری تلگرام"""
 import os, re, json, time, hashlib, random, feedparser, requests
 from datetime import datetime
-import socket
-socket.setdefaulttimeout(15)
+from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from deep_translator import GoogleTranslator
 import arabic_reshaper
@@ -17,8 +16,9 @@ CHAT_IDS_FILE = "chat_ids.json"
 OFFSET_FILE = "update_offset.json"
 MAX_SEND_PER_RUN = 1000
 RUN_DURATION_SECONDS = int(os.environ.get("RUN_DURATION_SECONDS", "1500"))
-CHECK_INTERVAL_SECONDS = 90
+CHECK_INTERVAL_SECONDS = 60
 FEED_TIMEOUT = 10
+TRANSLATE_TIMEOUT = 12
 FONT_BOLD = "fonts/Vazirmatn-Bold.ttf"
 FONT_REGULAR = "fonts/Vazirmatn-Regular.ttf"
 IMG_WIDTH, IMG_HEIGHT = 1080, 1920
@@ -46,6 +46,16 @@ WELCOME_TEXT = """🎉 خوش‌آمدید به ربات خبری «خبر با 
 (آژانس املاک و سرمایه‌گذاری در ترکیه)
 
 🔔 اخبار لحظه‌ای هر روز"""
+
+_executor = ThreadPoolExecutor(max_workers=4)
+
+
+def run_with_timeout(func, args=(), timeout=10, default=None):
+    future = _executor.submit(func, *args)
+    try:
+        return future.result(timeout=timeout)
+    except Exception:
+        return default
 
 
 def load_font(path, size):
@@ -120,11 +130,13 @@ def is_relevant(entry):
     return any(kw.lower() in text for kw in KEYWORDS)
 
 
+def _do_translate(text):
+    return GoogleTranslator(source="auto", target="fa").translate(text)
+
+
 def translate_to_persian(text):
-    try:
-        return GoogleTranslator(source="auto", target="fa").translate(text)
-    except:
-        return text
+    result = run_with_timeout(_do_translate, (text,), TRANSLATE_TIMEOUT, default=None)
+    return result if result else text
 
 
 def clean_text(text):
@@ -313,34 +325,37 @@ def send_photo_to_all(chat_ids, image_path, caption=""):
     ok_any = False
     for cid in chat_ids:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-        with open(image_path, "rb") as photo:
-            resp = requests.post(url, data={"chat_id": cid, "caption": caption}, files={"photo": photo}, timeout=30)
-        if resp.ok:
-            ok_any = True
-        else:
-            print(f"خطا در ارسال به {cid}: {resp.text}")
+        try:
+            with open(image_path, "rb") as photo:
+                resp = requests.post(url, data={"chat_id": cid, "caption": caption}, files={"photo": photo}, timeout=30)
+            if resp.ok:
+                ok_any = True
+            else:
+                print(f"خطا در ارسال به {cid}: {resp.text}")
+        except Exception as e:
+            print(f"خطا در ارسال به {cid}: {e}")
     return ok_any
 
 
+def _do_fetch(feed_url):
+    resp = requests.get(feed_url, timeout=FEED_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
+    return feedparser.parse(resp.content)
+
+
 def fetch_feed_safe(feed_url):
-    try:
-        resp = requests.get(feed_url, timeout=FEED_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"})
-        return feedparser.parse(resp.content)
-    except Exception as e:
-        print(f"خطا در دریافت {feed_url}: {e}")
-        return None
+    return run_with_timeout(_do_fetch, (feed_url,), FEED_TIMEOUT + 5, default=None)
 
 
-def fetch_and_process(sent_ids, chat_ids):
+def fetch_and_process(sent_ids, chat_ids, deadline):
     sent_count = 0
     for source_name, feed_url in RSS_FEEDS.items():
-        if sent_count >= MAX_SEND_PER_RUN:
+        if sent_count >= MAX_SEND_PER_RUN or time.time() > deadline:
             break
         feed = fetch_feed_safe(feed_url)
         if not feed or not getattr(feed, "entries", None):
             continue
         for entry in feed.entries[:15]:
-            if sent_count >= MAX_SEND_PER_RUN:
+            if sent_count >= MAX_SEND_PER_RUN or time.time() > deadline:
                 break
             eid = item_id(entry)
             if eid in sent_ids or not is_relevant(entry):
@@ -367,7 +382,7 @@ def fetch_and_process(sent_ids, chat_ids):
                 sent_count += 1
                 save_json_set(SENT_IDS_FILE, sent_ids)
                 print(f"ارسال شد: {source_name} -> {title[:50]}")
-            time.sleep(3)
+            time.sleep(2)
     return sent_ids
 
 
@@ -379,10 +394,11 @@ def main():
     chat_ids = load_json_set(CHAT_IDS_FILE, [OWNER_CHAT_ID])
     sent_ids = load_json_set(SENT_IDS_FILE, [])
     start = time.time()
+    hard_deadline = start + RUN_DURATION_SECONDS
     while time.time() - start < RUN_DURATION_SECONDS:
         chat_ids = poll_new_starters(chat_ids)
         save_json_set(CHAT_IDS_FILE, chat_ids)
-        sent_ids = fetch_and_process(sent_ids, chat_ids)
+        sent_ids = fetch_and_process(sent_ids, chat_ids, hard_deadline)
         time.sleep(CHECK_INTERVAL_SECONDS)
     print("پایان اجرا.")
 

@@ -40,7 +40,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RUN_DURATION_SECONDS: ${{ steps.duration.outputs.seconds }}
+          RUN_DURATION_SECONDS: "60"
         run: python bot.py
 
       - name: ذخیره لیست خبرهای ارسال‌شده (جلوگیری از تکرار)

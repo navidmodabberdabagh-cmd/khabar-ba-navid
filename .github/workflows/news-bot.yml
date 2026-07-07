@@ -44,6 +44,7 @@ jobs:
         run: python bot.py
 
       - name: ذخیره لیست خبرهای ارسال‌شده (جلوگیری از تکرار)
+        if: always()
         run: |
           git config user.name "khabar-ba-navid-bot"
           git config user.email "actions@github.com"

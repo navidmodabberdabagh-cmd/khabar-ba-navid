@@ -7,7 +7,8 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from deep_translator import GoogleTranslator
 import arabic_reshaper
 from bidi.algorithm import get_display
-from sources import RSS_FEEDS, KEYWORDS
+from sources import (RSS_FEEDS, KEYWORDS, WEATHER_ALLOWED_LOCATIONS,
+                      WEATHER_SEVERITY_WORDS, MEDICAL_SOURCES)
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 OWNER_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -19,34 +20,39 @@ RUN_DURATION_SECONDS = int(os.environ.get("RUN_DURATION_SECONDS", "1500"))
 CHECK_INTERVAL_SECONDS = 60
 FEED_TIMEOUT = 10
 TRANSLATE_TIMEOUT = 12
-SUMMARY_MAX_CHARS = 900
 FONT_BOLD = "fonts/Vazirmatn-Bold.ttf"
 FONT_REGULAR = "fonts/Vazirmatn-Regular.ttf"
 IMG_WIDTH, IMG_HEIGHT = 1080, 1920
 PADDING = 55
 BANNER_HEIGHT = 190
 
-HIGH_RANKING_COUNTRIES = ["آمریکا", "فرانسه", "آلمان", "اسپانیا", "اسرائیل", "امارات", "قطر", "عربستان", "پاکستان", "ترکیه", "ترامپ", "بایدن", "ماکرون", "شولتز", "نتانیاهو"]
-IMPORTANT_TOPICS = {"مهاجرت": ["مهاجرت", "ویزا", "اقامت", "اداره مهاجرت", "پناجران", "پناهندگی"], "رضا پهلوی": ["رضا پهلوی", "شاهزاده", "پهلوی"], "ترامپ_ایران": ["ترامپ", "تحریم ایران", "آمریکا ایران"]}
-WAR_COUNTRIES = ["اسرائیل", "آمریکا", "امارات", "بحرین", "عربستان", "ترکیه", "عراق"]
-
 WELCOME_TEXT = """🎉 خوش‌آمدید به ربات خبری «خبر با نوید»
 
-📰 این ربات توسط نوید مدبر ساخته شده و هر روز اخبار مرتبط با ایران و منطقه را می‌فرستد. شما می‌توانید بدون سانسور یا نگاه جانبدارانه تمام خبرها را بخوانید از تمام خبرگذاری‌های جهان
-
-📚 موضوعات خبری:
-✓ مهاجرت و ویزا
-✓ اخبار سیاسی و نظامی
-✓ فوتبال و ورزش
-✓ بورس و اقتصاد
-✓ و غیره...
-
-⚠️ علامت قرمز = موضوع مهم (مهاجرت، رضا پهلوی، ترامپ، جنگ)
+📰 این ربات توسط نوید مدبر ساخته شده و هر روز اخبار مرتبط با ایران و منطقه را می‌فرستد.
 
 📱 پیج اینستاگرام: @nm_est
-(آژانس املاک و سرمایه‌گذاری در ترکیه)
 
 🔔 اخبار لحظه‌ای هر روز"""
+
+COUNTRY_WATERMARKS = {
+    "ترکیه": {"color": (200, 30, 30), "flag": True},
+    "ایران": {"color": None, "flag": False, "special": "iran"},
+    "روسیه": {"color": (190, 190, 190), "flag": False},
+    "اوکراین": {"color": (70, 180, 70), "flag": False},
+    "آمریکا": {"color": (130, 130, 130), "flag": True},
+    "اسرائیل": {"color": (60, 90, 190), "flag": True},
+    "چین": {"color": (190, 30, 30), "flag": True},
+}
+COUNTRY_KEYWORDS = {
+    "ترکیه": ["ترکیه", "turkey", "استانبول", "آنکارا"],
+    "ایران": ["ایران", "iran", "تهران"],
+    "روسیه": ["روسیه", "russia"],
+    "اوکراین": ["اوکراین", "اکراین", "ukraine"],
+    "آمریکا": ["آمریکا", "امریکا", "america", "united states", "واشنگتن"],
+    "اسرائیل": ["اسرائیل", "israel"],
+    "چین": ["چین", "china"],
+}
+FOOTBALL_WORDS = ["فوتبال", "football", "جام جهانی", "world cup", "لیگ", "team melli", "گل زد"]
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
@@ -108,14 +114,17 @@ def poll_new_starters(chat_ids):
     new_offset = offset
     for u in updates:
         new_offset = max(new_offset, u.get("update_id", 0) + 1)
-        msg = u.get("message")
+        msg = u.get("message") or u.get("my_chat_member", {}).get("chat")
         if not msg:
             continue
-        cid = str(msg["chat"]["id"])
+        chat_obj = msg.get("chat") if isinstance(msg, dict) and "chat" in msg else msg
+        if not chat_obj or "id" not in chat_obj:
+            continue
+        cid = str(chat_obj["id"])
         if cid not in chat_ids:
             chat_ids.add(cid)
             send_message(cid, WELCOME_TEXT)
-            print(f"کاربر جدید اضافه شد: {cid}")
+            print(f"چت جدید اضافه شد: {cid}")
     if new_offset > offset:
         save_offset(new_offset)
     return chat_ids
@@ -126,9 +135,30 @@ def item_id(entry):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def get_entry_text(entry):
+    parts = []
+    for key in ["title", "summary", "description"]:
+        val = entry.get(key, "")
+        if val:
+            parts.append(str(val))
+    if "summary_detail" in entry and isinstance(entry["summary_detail"], dict):
+        parts.append(str(entry["summary_detail"].get("value", "")))
+    if "content" in entry:
+        for c in entry.get("content", []):
+            parts.append(str(c.get("value", "")))
+    return " ".join(parts)
+
+
 def is_relevant(entry):
-    text = (entry.get("title", "") + " " + entry.get("summary", "")).lower()
+    text = get_entry_text(entry).lower()
     return any(kw.lower() in text for kw in KEYWORDS)
+
+
+def passes_weather_filter(full_text):
+    is_weather = any(w in full_text for w in WEATHER_SEVERITY_WORDS)
+    if not is_weather:
+        return True
+    return any(loc in full_text for loc in WEATHER_ALLOWED_LOCATIONS)
 
 
 def _do_translate(text):
@@ -152,39 +182,35 @@ def shape_text(text):
     return get_display(reshaped)
 
 
-def apply_replacements(text, original_text):
-    text = re.sub(r"(آیت\s*الله|امام)?\s*خامنه\s*ای", "خامنه‌ای", text)
-    text = re.sub(r"(آیت\s*الله|امام)?\s*خمینی", "خمینی", text)
+def apply_replacements(text):
+    text = re.sub(r"آیت\s*[-‌]?\s*الله\s*", "", text)
+    text = re.sub(r"(^|\s)امام\s+خامنه", r"\1خامنه", text)
+    text = re.sub(r"(^|\s)امام\s+خمینی", r"\1خمینی", text)
     text = text.replace("رهبر شهید", "جسد خامنه‌ای")
     text = text.replace("جمهوری اسلامی ایران", "جمهوری اسلامی")
     text = text.replace("رژیم صهیونیستی", "اسرائیل")
     text = text.replace("شهدای لبنان", "کشته‌شدگان لبنانی")
-    has_high_ranking = any(country.lower() in original_text.lower() for country in HIGH_RANKING_COUNTRIES)
-    if not has_high_ranking:
-        text = re.sub(r"آیت\s*الله\s+(\w+)", r"آقای \1", text)
-        text = re.sub(r"امام\s+(\w+)", r"آقای \1", text)
-    return text
+    return clean_text(text)
 
 
-def detect_important_topic(text):
-    text_lower = text.lower()
-    for topic, keywords in IMPORTANT_TOPICS.items():
-        for kw in keywords:
-            if kw.lower() in text_lower:
-                return topic
+def detect_football(text):
+    t = text.lower()
+    return any(w.lower() in t for w in FOOTBALL_WORDS)
+
+
+def detect_medical(source_name, text):
+    if source_name in MEDICAL_SOURCES:
+        return True
+    med_words = ["cancer", "درمان سرطان", "immunotherapy", "desalination", "آب شیرین‌سازی"]
+    t = text.lower()
+    return any(w.lower() in t for w in med_words)
+
+
+def detect_country(text):
+    for country, kws in COUNTRY_KEYWORDS.items():
+        if any(kw.lower() in text.lower() for kw in kws):
+            return country
     return None
-
-
-def detect_halo(text):
-    has_iran = "ایران" in text
-    has_war_word = "جنگ" in text
-    turkey_migration = ("ترکیه" in text) and ("قانون" in text) and ("مهاجرت" in text)
-    turkey_war = ("ترکیه" in text) and has_war_word
-    if turkey_migration or turkey_war:
-        return True, (255, 140, 0, 100)
-    if has_iran and has_war_word and any(c in text for c in WAR_COUNTRIES):
-        return True, (255, 40, 40, 100)
-    return False, None
 
 
 def wrap_text(text, font, max_width, draw):
@@ -214,11 +240,11 @@ def draw_center_line(draw, text, font, y, fill, stroke_fill, width):
 
 
 def make_marble_background(width, height):
-    base = Image.new("RGB", (width, height), (10, 10, 10))
+    base = Image.new("RGB", (width, height), (12, 12, 12))
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    gold_tones = [(255, 215, 0), (212, 175, 55), (255, 230, 150)]
-    vein_count = random.randint(14, 30)
+    gold_tones = [(212, 175, 55), (184, 134, 11), (245, 222, 179)]
+    vein_count = random.randint(10, 28)
     base_angle_bias = random.choice(["horizontal", "vertical", "diagonal"])
     for _ in range(vein_count):
         x, y = random.randint(0, width), random.randint(0, height)
@@ -235,46 +261,68 @@ def make_marble_background(width, height):
                 y += random.randint(60, 180)
             pts.append((x, y))
         color = random.choice(gold_tones)
-        alpha = random.randint(35, 110)
+        alpha = random.randint(25, 85)
         draw.line(pts, fill=color + (alpha,), width=random.randint(1, 4))
-    overlay = overlay.filter(ImageFilter.GaussianBlur(random.uniform(1.0, 2.2)))
+    overlay = overlay.filter(ImageFilter.GaussianBlur(random.uniform(1.2, 2.8)))
     img = Image.alpha_composite(base.convert("RGBA"), overlay)
-
-    shine = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(shine)
-    for _ in range(4):
-        sx = random.randint(0, width)
-        sy = random.randint(0, height)
-        sr = random.randint(int(width * 0.15), int(width * 0.4))
-        sd.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=(255, 255, 255, random.randint(10, 22)))
-    shine = shine.filter(ImageFilter.GaussianBlur(120))
-    img = Image.alpha_composite(img, shine).convert("RGB")
+    light = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(light)
+    lx = random.randint(int(width * 0.1), int(width * 0.5))
+    ly = random.randint(int(height * 0.05), int(height * 0.25))
+    r = int(width * random.uniform(0.5, 0.75))
+    ld.ellipse([lx - r, ly - r, lx + r, ly + r], fill=(255, 255, 255, random.randint(15, 28)))
+    light = light.filter(ImageFilter.GaussianBlur(150))
+    img = Image.alpha_composite(img, light).convert("RGB")
     return img
 
 
-def draw_alert_icon(img, draw, x_center, y_center, halo_rgba):
-    if halo_rgba:
-        size = 220
-        halo_img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        hd = ImageDraw.Draw(halo_img)
-        hd.ellipse([0, 0, size, size], fill=halo_rgba)
-        halo_img = halo_img.filter(ImageFilter.GaussianBlur(30))
-        img.paste(halo_img, (x_center - size // 2, y_center - size // 2), halo_img)
-    r = 45
-    draw.ellipse([x_center - r, y_center - r, x_center + r, y_center + r], fill=(220, 20, 20, 255))
-    excl_font = load_font(FONT_BOLD, 55)
-    tw = draw.textlength("!", font=excl_font)
-    draw.text((x_center - tw / 2, y_center - 32), "!", font=excl_font, fill="white")
+def draw_football_icon(img, x_center, y_bottom):
+    size = 160
+    icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(icon)
+    d.pieslice([0, 0, size * 2, size * 2], 180, 270, fill=(240, 240, 240, 210))
+    d.arc([0, 0, size * 2, size * 2], 180, 270, fill=(20, 20, 20, 230), width=4)
+    for i in range(3):
+        d.line([(size * 0.2 + i * 15, size * 0.15), (size * 0.35 + i * 15, size * 0.4)],
+               fill=(20, 20, 20, 200), width=3)
+    icon = icon.filter(ImageFilter.GaussianBlur(1.5))
+    img.paste(icon, (x_center - size, y_bottom - size), icon)
 
 
-def draw_corner_sparkle(draw, width, height):
-    corners = [(20, 20), (width - 20, 20), (20, height - 20), (width - 20, height - 20)]
-    for cx, cy in corners:
-        for r, alpha in [(14, 200), (24, 100), (34, 50)]:
-            draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(255, 240, 180, alpha), width=2)
+def draw_medical_icon(img, x_left, y_bottom):
+    size = 150
+    icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(icon)
+    d.arc([20, 10, size - 20, size - 40], 30, 330, fill=(200, 200, 200, 200), width=6)
+    d.ellipse([size // 2 - 15, size - 55, size // 2 + 15, size - 25], outline=(200, 200, 200, 200), width=5)
+    icon = icon.filter(ImageFilter.GaussianBlur(2.0))
+    img.paste(icon, (x_left, y_bottom - size), icon)
 
 
-def make_image(source_name, headline_fa, body_fa, important_topic, halo_color):
+def draw_country_watermark(img, country, width, total_height):
+    info = COUNTRY_WATERMARKS.get(country)
+    if not info:
+        return
+    size = 260
+    blob = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(blob)
+    if info.get("special") == "iran":
+        d.pieslice([0, 0, size, size // 3], 0, 360, fill=(0, 150, 60, 90))
+        d.pieslice([0, size // 3, size, 2 * size // 3], 0, 360, fill=(240, 240, 240, 90))
+        d.pieslice([0, 2 * size // 3, size, size], 0, 360, fill=(200, 20, 20, 90))
+    else:
+        color = info["color"] + (100,)
+        d.ellipse([0, 0, size, size], fill=color)
+        if info.get("flag"):
+            d.rectangle([size * 0.3, size * 0.3, size * 0.7, size * 0.4],
+                        fill=(255, 255, 255, 60))
+    blob = blob.filter(ImageFilter.GaussianBlur(14))
+    x = width - size + 40
+    y = total_height - size + 60
+    img.paste(blob, (x, y), blob)
+
+
+def make_image(source_name, headline_fa, body_fa, full_check_text):
     source_name = clean_text(source_name)
     headline_fa = clean_text(headline_fa)
     body_fa = clean_text(body_fa)
@@ -317,16 +365,23 @@ def make_image(source_name, headline_fa, body_fa, important_topic, halo_color):
 
     shaped_footer = shape_text("خبر با نوید")
     fw = draw.textlength(shaped_footer, font=footer_font)
-    draw.text(((IMG_WIDTH - fw) / 2, total_height - footer_height + 15), shaped_footer, font=footer_font, fill=(0, 150, 136, 255))
+    draw.text(((IMG_WIDTH - fw) / 2, total_height - footer_height + 15),
+              shaped_footer, font=footer_font, fill=(0, 150, 136, 255))
 
     insta_text = "Instagram : @NM_EST"
     iw = draw.textlength(insta_text, font=insta_font)
-    draw.text(((IMG_WIDTH - iw) / 2, total_height - footer_height + 65), insta_text, font=insta_font, fill=(180, 180, 180, 255))
+    draw.text(((IMG_WIDTH - iw) / 2, total_height - footer_height + 65),
+              insta_text, font=insta_font, fill=(180, 180, 180, 255))
 
-    if important_topic or halo_color:
-        draw_alert_icon(img, draw, 100, BANNER_HEIGHT + 60, halo_color)
-
-    draw_corner_sparkle(draw, IMG_WIDTH, total_height)
+    # اولویت: فوتبال > پزشکی > کشور
+    if detect_football(full_check_text):
+        draw_football_icon(img, IMG_WIDTH - 40, total_height - 30)
+    elif detect_medical(source_name, full_check_text):
+        draw_medical_icon(img, 40, total_height - 30)
+    else:
+        country = detect_country(full_check_text)
+        if country:
+            draw_country_watermark(img, country, IMG_WIDTH, total_height)
 
     img = img.convert("RGB")
     path = "temp_news.jpg"
@@ -340,7 +395,8 @@ def send_photo_to_all(chat_ids, image_path, caption=""):
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
         try:
             with open(image_path, "rb") as photo:
-                resp = requests.post(url, data={"chat_id": cid, "caption": caption}, files={"photo": photo}, timeout=30)
+                resp = requests.post(url, data={"chat_id": cid, "caption": caption},
+                                      files={"photo": photo}, timeout=30)
             if resp.ok:
                 ok_any = True
             else:
@@ -356,14 +412,7 @@ def _do_fetch(feed_url):
 
 
 def fetch_feed_safe(feed_url):
-    result = run_with_timeout(_do_fetch, (feed_url,), FEED_TIMEOUT + 5, default=None)
-    if result is None:
-        print(f"⛔ فید ناموفق: {feed_url}")
-    elif not getattr(result, "entries", None):
-        print(f"⚠️ فید خالی: {feed_url}")
-    else:
-        print(f"✅ فید موفق: {feed_url} -> {len(result.entries)} خبر")
-    return result
+    return run_with_timeout(_do_fetch, (feed_url,), FEED_TIMEOUT + 5, default=None)
 
 
 def fetch_and_process(sent_ids, chat_ids, deadline):
@@ -381,31 +430,33 @@ def fetch_and_process(sent_ids, chat_ids, deadline):
             if eid in sent_ids or not is_relevant(entry):
                 continue
             title = clean_text(entry.get("title", ""))
-            summary = clean_text(re.sub("<[^<]+?>", "", entry.get("summary", "")))[:SUMMARY_MAX_CHARS]
+            summary = clean_text(re.sub("<[^<]+?>", "", get_entry_text(entry)))[:400]
             original_full = f"{title}. {summary}"
 
-            headline_fa = clean_text(translate_to_persian(title))
-            body_fa = clean_text(translate_to_persian(summary)) if summary else ""
+            headline_fa = translate_to_persian(title)
+            body_fa = translate_to_persian(summary) if summary else ""
 
-            headline_fa = apply_replacements(headline_fa, original_full)
-            body_fa = apply_replacements(body_fa, original_full)
+            headline_fa = apply_replacements(headline_fa)
+            body_fa = apply_replacements(body_fa)
 
             full_check = original_full + " " + headline_fa + " " + body_fa
-            important_topic = detect_important_topic(full_check)
-            has_halo, halo_color = detect_halo(full_check)
 
-            img_path = make_image(source_name, headline_fa, body_fa, important_topic or has_halo, halo_color)
-            caption_text = f"{headline_fa}\n\n{body_fa}\n\nInstagram: @NM_EST" if body_fa else f"{headline_fa}\n\nInstagram: @NM_EST"
-            if len(caption_text) > 1000:
-                caption_text = caption_text[:1000] + "…"
-            ok = send_photo_to_all(chat_ids, img_path, caption_text)
-            if ok:
+            if not passes_weather_filter(full_check):
                 sent_ids.add(eid)
-                sent_count += 1
-                save_json_set(SENT_IDS_FILE, sent_ids)
-                print(f"ارسال شد: {source_name} -> {title[:50]}")
-            else:
-                print(f"⚠️ ارسال ناموفق برای: {source_name} -> {title[:50]}")
+                continue
+
+            try:
+                img_path = make_image(source_name, headline_fa, body_fa, full_check)
+                caption_text = (f"{headline_fa}\n\n{body_fa}\n\nInstagram: @NM_EST"
+                                 if body_fa else f"{headline_fa}\n\nInstagram: @NM_EST")
+                ok = send_photo_to_all(chat_ids, img_path, caption_text)
+                if ok:
+                    sent_ids.add(eid)
+                    sent_count += 1
+                    save_json_set(SENT_IDS_FILE, sent_ids)
+                    print(f"ارسال شد: {source_name} -> {title[:50]}")
+            except Exception as e:
+                print(f"❌ خطا در ساخت/ارسال عکس برای {source_name}: {e}")
             time.sleep(2)
     return sent_ids
 
@@ -416,19 +467,14 @@ def main():
         print("لطفاً TELEGRAM_BOT_TOKEN را تنظیم کنید.")
         return
     chat_ids = load_json_set(CHAT_IDS_FILE, [OWNER_CHAT_ID])
-    if OWNER_CHAT_ID:
-        chat_ids.add(str(OWNER_CHAT_ID))
-    print(f"تعداد کاربران فعلی: {len(chat_ids)} -> {chat_ids}")
     sent_ids = load_json_set(SENT_IDS_FILE, [])
+    print(f"تعداد چت‌های فعلی: {len(chat_ids)}")
     start = time.time()
     hard_deadline = start + RUN_DURATION_SECONDS
     while time.time() - start < RUN_DURATION_SECONDS:
         chat_ids = poll_new_starters(chat_ids)
-        if OWNER_CHAT_ID:
-            chat_ids.add(str(OWNER_CHAT_ID))
         save_json_set(CHAT_IDS_FILE, chat_ids)
         sent_ids = fetch_and_process(sent_ids, chat_ids, hard_deadline)
-        print(f"⏳ یک دور کامل تمام شد، {int(hard_deadline - time.time())} ثانیه باقی مانده")
         time.sleep(CHECK_INTERVAL_SECONDS)
     print("پایان اجرا.")
 

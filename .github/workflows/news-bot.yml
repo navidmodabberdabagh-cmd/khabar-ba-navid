@@ -6,12 +6,12 @@ on:
   workflow_dispatch: {}
 concurrency:
   group: khabar-ba-navid-bot
-  cancel-in-progress: false
+  cancel-in-progress: true
   
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 9
     steps:
       - name: دریافت کد از مخزن
         uses: actions/checkout@v4

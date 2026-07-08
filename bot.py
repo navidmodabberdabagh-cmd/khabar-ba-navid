@@ -330,8 +330,8 @@ def make_image(source_name, headline_fa, body_fa, full_check_text):
     dummy = Image.new("RGB", (10, 10))
     d = ImageDraw.Draw(dummy)
 
-    source_font = load_font(FONT_BOLD, 52)
-    headline_font = load_font(FONT_BOLD, 46)
+    source_font = load_font(FONT_REGULAR, 30)
+    headline_font = load_font(FONT_BOLD, 54)
     body_font = load_font(FONT_REGULAR, 40)
     footer_font = load_font(FONT_BOLD, 42)
     insta_font = load_font(FONT_REGULAR, 32)
@@ -340,41 +340,56 @@ def make_image(source_name, headline_fa, body_fa, full_check_text):
     headline_lines = wrap_text(headline_fa, headline_font, max_w, d)
     body_lines = wrap_text(body_fa, body_font, max_w, d) if body_fa else []
 
-    top_area = BANNER_HEIGHT + 50 + len(headline_lines) * 62 + 25
+    top_padding = 80
+    top_area = top_padding + len(headline_lines) * 70 + 25
     body_height = len(body_lines) * 60
-    footer_height = 150
+    footer_height = 190
     total_height = max(top_area + body_height + footer_height, IMG_HEIGHT)
 
     img = make_marble_background(IMG_WIDTH, total_height).convert("RGBA")
     draw = ImageDraw.Draw(img, "RGBA")
 
-    draw.rectangle([0, 0, IMG_WIDTH, BANNER_HEIGHT], fill=(200, 16, 46, 255))
-    shaped_src = shape_text(source_name)
-    sw = draw.textlength(shaped_src, font=source_font)
-    draw.text(((IMG_WIDTH - sw) / 2, BANNER_HEIGHT - 78), shaped_src, font=source_font, fill="white")
-
-    y = BANNER_HEIGHT + 50
+    y = top_padding
     for line in headline_lines:
-        draw_center_line(draw, line, headline_font, y, (144, 238, 144, 255), (0, 0, 0, 255), IMG_WIDTH)
-        y += 62
+        draw_center_line(draw, line, headline_font, y, (0, 140, 60, 255), (0, 0, 0, 255), IMG_WIDTH)
+        y += 70
 
     y += 25
     for line in body_lines:
         draw_center_line(draw, line, body_font, y, (255, 255, 255, 255), (0, 0, 0, 255), IMG_WIDTH)
         y += 60
 
+    source_line = shape_text(f"خبرگذاری: {source_name}")
+    draw.text((PADDING, total_height - footer_height + 15), source_line, font=source_font,
+              fill=(210, 210, 210, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+
     shaped_footer = shape_text("خبر با نوید")
     fw = draw.textlength(shaped_footer, font=footer_font)
-    draw.text(((IMG_WIDTH - fw) / 2, total_height - footer_height + 15),
+    draw.text(((IMG_WIDTH - fw) / 2, total_height - footer_height + 65),
               shaped_footer, font=footer_font, fill=(0, 150, 136, 255))
 
     insta_text = "Instagram : @NM_EST"
     iw = draw.textlength(insta_text, font=insta_font)
-    draw.text(((IMG_WIDTH - iw) / 2, total_height - footer_height + 65),
+    draw.text(((IMG_WIDTH - iw) / 2, total_height - footer_height + 120),
               insta_text, font=insta_font, fill=(180, 180, 180, 255))
 
     # اولویت: فوتبال > پزشکی > کشور
     if detect_football(full_check_text):
+        draw_football_icon(img, IMG_WIDTH - 40, total_height - 30)
+    elif detect_medical(source_name, full_check_text):
+        draw_medical_icon(img, 40, total_height - 30)
+    else:
+        country = detect_country(full_check_text)
+        if country:
+            draw_country_watermark(img, country, IMG_WIDTH, total_height)
+
+    img = img.convert("RGB")
+    path = "temp_news.jpg"
+    img.save(path, quality=92)
+    return path
+
+
+def send_photo_to_all(chat_ids, image_path, caption=""):
         draw_football_icon(img, IMG_WIDTH - 40, total_height - 30)
     elif detect_medical(source_name, full_check_text):
         draw_medical_icon(img, 40, total_height - 30)

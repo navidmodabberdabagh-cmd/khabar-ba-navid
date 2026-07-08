@@ -146,7 +146,7 @@ def get_entry_text(entry):
 
 def is_relevant(entry):
     text = get_entry_text(entry).lower()
-    return any(kw.lower() in text for kw in KEYWORDS])
+    return any(kw.lower() in text for kw in KEYWORDS)
 
 def passes_weather_filter(full_text):
     is_weather = any(w in full_text for w in WEATHER_SEVERITY_WORDS)

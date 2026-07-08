@@ -9,7 +9,8 @@ import arabic_reshaper
 from bidi.algorithm import get_display
 from sources import (RSS_FEEDS, KEYWORDS, WEATHER_ALLOWED_LOCATIONS,
                       WEATHER_SEVERITY_WORDS, MEDICAL_SOURCES)
-import os, re, json, time, hashlib, ...
+import socket
+socket.setdefaulttimeout(15)
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 OWNER_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")

@@ -442,22 +442,6 @@ def make_image(source_name, headline_fa, body_fa, full_check_text):
     img.save(path, quality=92)
     return path
 
-
-def send_photo_to_all(chat_ids, image_path, caption=""):
-        draw_football_icon(img, IMG_WIDTH - 40, total_height - 30)
-    elif detect_medical(source_name, full_check_text):
-        draw_medical_icon(img, 40, total_height - 30)
-    else:
-        country = detect_country(full_check_text)
-        if country:
-            draw_country_watermark(img, country, IMG_WIDTH, total_height)
-
-    img = img.convert("RGB")
-    path = "temp_news.jpg"
-    img.save(path, quality=92)
-    return path
-
-
 def send_photo_to_all(chat_ids, image_path, caption=""):
     ok_any = False
     for cid in chat_ids:

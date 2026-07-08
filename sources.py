@@ -33,6 +33,12 @@ RSS_FEEDS = {
     "BBC Sport Football": "https://feeds.bbci.co.uk/sport/football/rss.xml",
     "EU Home Affairs": "https://home-affairs.ec.europa.eu/rss_en",
     "GOV UK Home Office": "https://www.gov.uk/government/organisations/home-office.atom",
+    "Radio Farda": "https://en.radiofarda.com/api/zp_qmtl-vomx-tpe_bimr",
+    "The Guardian": "https://www.theguardian.com/world/rss",
+    "Axios": "https://www.axios.com/feeds/feed.rss",
+    "The War Zone": "https://www.twz.com/feed",
+    "19FortyFive": "https://www.19fortyfive.com/feed",
+    "Middle East Eye": "https://www.middleeasteye.net/rss",
 }
 
 KEYWORDS = [

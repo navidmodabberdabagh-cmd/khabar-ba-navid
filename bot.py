@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """خبر با نوید - ربات خبری تلگرام"""
-import os, re, json, time, hashlib, random, feedparser, requests
+import os, re, json, time, hashlib, random, math, feedparser, requests
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageDraw, ImageFont, ImageFilter

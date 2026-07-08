@@ -9,6 +9,7 @@ import arabic_reshaper
 from bidi.algorithm import get_display
 from sources import (RSS_FEEDS, KEYWORDS, WEATHER_ALLOWED_LOCATIONS,
                       WEATHER_SEVERITY_WORDS, MEDICAL_SOURCES)
+import os, re, json, time, hashlib, ...
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 OWNER_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -526,6 +527,7 @@ def main():
     sent_ids = fetch_and_process(sent_ids, chat_ids)
     
     print("پایان اجرا.")
+    os._exit(0)
 
 if __name__ == "__main__":
     main()

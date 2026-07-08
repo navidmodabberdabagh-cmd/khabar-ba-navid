@@ -8,7 +8,7 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 33
+    timeout-minutes: 10
     steps:
       - name: دریافت کد از مخزن
         uses: actions/checkout@v4
@@ -27,20 +27,11 @@ jobs:
           curl -sL -o fonts/Vazirmatn-Regular.ttf "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Regular.ttf"
           curl -sL -o fonts/Vazirmatn-Bold.ttf "https://github.com/rastikerdar/vazirmatn/raw/master/fonts/ttf/Vazirmatn-Bold.ttf"
 
-      - name: تعیین مدت زمان اجرا بر اساس ساعت
-        id: duration
-        run: |
-          if [ "${{ github.event.schedule }}" == "0 23 * * *" ] || [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
-            echo "seconds=900" >> "$GITHUB_OUTPUT"
-          else
-            echo "seconds=1800" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: اجرای ربات
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RUN_DURATION_SECONDS: ${{ steps.duration.outputs.seconds }}
+          RUN_DURATION_SECONDS: "60"
         run: python bot.py
 
       - name: ذخیره لیست خبرهای ارسال‌شده (جلوگیری از تکرار)

@@ -239,41 +239,79 @@ def draw_center_line(draw, text, font, y, fill, stroke_fill, width):
     draw.text((x, y), shaped, font=font, fill=fill, stroke_width=3, stroke_fill=stroke_fill)
 
 
-def make_marble_background(width, height):
-    base = Image.new("RGB", (width, height), (12, 12, 12))
-    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    gold_tones = [(212, 175, 55), (184, 134, 11), (245, 222, 179)]
-    vein_count = random.randint(10, 28)
-    base_angle_bias = random.choice(["horizontal", "vertical", "diagonal"])
-    for _ in range(vein_count):
-        x, y = random.randint(0, width), random.randint(0, height)
-        pts = [(x, y)]
-        for _ in range(5):
-            if base_angle_bias == "horizontal":
-                x += random.randint(-220, 220)
-                y += random.randint(20, 60)
-            elif base_angle_bias == "vertical":
-                x += random.randint(-40, 40)
-                y += random.randint(60, 200)
-            else:
-                x += random.randint(-160, 160)
-                y += random.randint(60, 180)
-            pts.append((x, y))
-        color = random.choice(gold_tones)
-        alpha = random.randint(25, 85)
-        draw.line(pts, fill=color + (alpha,), width=random.randint(1, 4))
-    overlay = overlay.filter(ImageFilter.GaussianBlur(random.uniform(1.2, 2.8)))
-    img = Image.alpha_composite(base.convert("RGBA"), overlay)
-    light = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(light)
-    lx = random.randint(int(width * 0.1), int(width * 0.5))
-    ly = random.randint(int(height * 0.05), int(height * 0.25))
-    r = int(width * random.uniform(0.5, 0.75))
-    ld.ellipse([lx - r, ly - r, lx + r, ly + r], fill=(255, 255, 255, random.randint(15, 28)))
-    light = light.filter(ImageFilter.GaussianBlur(150))
-    img = Image.alpha_composite(img, light).convert("RGB")
+def make_compass_rose(size, color=(197, 168, 103, 130)):
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    cx, cy = size // 2, size // 2
+    r = size // 2 - 5
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=2)
+    d.ellipse([cx - r * 0.6, cy - r * 0.6, cx + r * 0.6, cy + r * 0.6], outline=color, width=1)
+    for angle in range(0, 360, 45):
+        rad = math.radians(angle)
+        x2 = cx + r * 0.95 * math.sin(rad)
+        y2 = cy - r * 0.95 * math.cos(rad)
+        d.line([cx, cy, x2, y2], fill=color, width=2)
+    pts = []
+    for angle in range(0, 360, 90):
+        rad = math.radians(angle)
+        pts.append((cx + r * 0.5 * math.sin(rad), cy - r * 0.5 * math.cos(rad)))
+    d.polygon(pts, outline=color, width=2)
     return img
+
+
+def make_geo_mesh(width, height, color=(197, 168, 103, 80), point_count=22):
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    pts = [(random.randint(0, width), random.randint(0, height)) for _ in range(point_count)]
+    for i in range(len(pts)):
+        for j in range(i + 1, len(pts)):
+            if random.random() < 0.12:
+                d.line([pts[i], pts[j]], fill=color, width=1)
+    return img
+
+
+def make_premium_background(width, height):
+    base = Image.new("RGB", (width, height), (10, 32, 34))
+    top_c, bottom_c = (8, 26, 28), (16, 44, 46)
+    px = base.load()
+    for y in range(height):
+        t = y / height
+        r = int(top_c[0] + (bottom_c[0] - top_c[0]) * t)
+        g = int(top_c[1] + (bottom_c[1] - top_c[1]) * t)
+        b = int(top_c[2] + (bottom_c[2] - top_c[2]) * t)
+        for x in range(0, width, 4):
+            for xx in range(x, min(x + 4, width)):
+                px[xx, y] = (r, g, b)
+    img = base.convert("RGBA")
+
+    compass = make_compass_rose(int(width * 0.34))
+    img.paste(compass, (int(-width * 0.06), int(height * 0.02)), compass)
+
+    mesh1 = make_geo_mesh(int(width * 0.5), int(height * 0.22), point_count=18)
+    img.paste(mesh1, (int(width * 0.55), 0), mesh1)
+
+    mesh2 = make_geo_mesh(int(width * 0.45), int(height * 0.18), point_count=14)
+    img.paste(mesh2, (0, height - int(height * 0.18)), mesh2)
+
+    mesh3 = make_geo_mesh(int(width * 0.4), int(height * 0.16), point_count=14)
+    img.paste(mesh3, (width - int(width * 0.4), height - int(height * 0.16)), mesh3)
+
+    return img.convert("RGB")
+
+
+def draw_glass_card(img, x, y, w, h):
+    radius = 40
+    card = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    cd = ImageDraw.Draw(card)
+    cd.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=(150, 180, 185, 55))
+    streak = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(streak)
+    sd.line([(w * 0.15, 0), (w * 0.55, h)], fill=(255, 255, 255, 35), width=int(w * 0.12))
+    streak = streak.filter(ImageFilter.GaussianBlur(30))
+    card = Image.alpha_composite(card, streak)
+    bd = ImageDraw.Draw(card)
+    bd.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, outline=(220, 190, 120, 170), width=2)
+    img.paste(card, (x, y), card)
 
 
 def draw_football_icon(img, x_center, y_bottom):
@@ -333,47 +371,63 @@ def make_image(source_name, headline_fa, body_fa, full_check_text):
     source_font = load_font(FONT_REGULAR, 30)
     headline_font = load_font(FONT_BOLD, 54)
     body_font = load_font(FONT_REGULAR, 40)
-    footer_font = load_font(FONT_BOLD, 42)
+    brand_font = load_font(FONT_BOLD, 46)
     insta_font = load_font(FONT_REGULAR, 32)
 
-    max_w = IMG_WIDTH - 2 * PADDING
+    card_margin_x = 90
+    card_w = IMG_WIDTH - 2 * card_margin_x
+    inner_pad = 60
+    max_w = card_w - 2 * inner_pad
+
     headline_lines = wrap_text(headline_fa, headline_font, max_w, d)
     body_lines = wrap_text(body_fa, body_font, max_w, d) if body_fa else []
 
-    top_padding = 80
-    top_area = top_padding + len(headline_lines) * 70 + 25
-    body_height = len(body_lines) * 60
-    footer_height = 190
-    total_height = max(top_area + body_height + footer_height, IMG_HEIGHT)
+    card_content_h = 70 + len(headline_lines) * 70 + 25 + len(body_lines) * 60 + 90
+    card_h = max(card_content_h, 900)
 
-    img = make_marble_background(IMG_WIDTH, total_height).convert("RGBA")
+    top_margin = 180
+    footer_h = 260
+    total_height = max(top_margin + card_h + footer_h, IMG_HEIGHT)
+
+    img = make_premium_background(IMG_WIDTH, total_height).convert("RGBA")
+    card_x, card_y = card_margin_x, top_margin
+    draw_glass_card(img, card_x, card_y, card_w, card_h)
+
     draw = ImageDraw.Draw(img, "RGBA")
 
-    y = top_padding
+    y = card_y + 70
     for line in headline_lines:
-        draw_center_line(draw, line, headline_font, y, (0, 140, 60, 255), (0, 0, 0, 255), IMG_WIDTH)
+        shaped = shape_text(line)
+        tw = draw.textlength(shaped, font=headline_font)
+        x = card_x + (card_w - tw) / 2
+        draw.text((x, y), shaped, font=headline_font, fill=(0, 150, 65, 255),
+                   stroke_width=3, stroke_fill=(0, 0, 0, 255))
         y += 70
 
     y += 25
     for line in body_lines:
-        draw_center_line(draw, line, body_font, y, (255, 255, 255, 255), (0, 0, 0, 255), IMG_WIDTH)
+        shaped = shape_text(line)
+        tw = draw.textlength(shaped, font=body_font)
+        x = card_x + (card_w - tw) / 2
+        draw.text((x, y), shaped, font=body_font, fill=(255, 255, 255, 255),
+                   stroke_width=3, stroke_fill=(0, 0, 0, 255))
         y += 60
 
     source_line = shape_text(f"خبرگذاری: {source_name}")
-    draw.text((PADDING, total_height - footer_height + 15), source_line, font=source_font,
-              fill=(210, 210, 210, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+    draw.text((card_x + inner_pad, card_y + card_h - 70), source_line, font=source_font,
+              fill=(220, 220, 220, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
 
-    shaped_footer = shape_text("خبر با نوید")
-    fw = draw.textlength(shaped_footer, font=footer_font)
-    draw.text(((IMG_WIDTH - fw) / 2, total_height - footer_height + 65),
-              shaped_footer, font=footer_font, fill=(0, 150, 136, 255))
+    footer_y = card_y + card_h + 50
+    shaped_brand = shape_text("خبر با نوید")
+    bw = draw.textlength(shaped_brand, font=brand_font)
+    draw.text(((IMG_WIDTH - bw) / 2, footer_y + 60), shaped_brand, font=brand_font,
+              fill=(230, 120, 60, 255))
 
     insta_text = "Instagram : @NM_EST"
     iw = draw.textlength(insta_text, font=insta_font)
-    draw.text(((IMG_WIDTH - iw) / 2, total_height - footer_height + 120),
-              insta_text, font=insta_font, fill=(180, 180, 180, 255))
+    draw.text(((IMG_WIDTH - iw) / 2, footer_y), insta_text, font=insta_font,
+              fill=(210, 210, 210, 255))
 
-    # اولویت: فوتبال > پزشکی > کشور
     if detect_football(full_check_text):
         draw_football_icon(img, IMG_WIDTH - 40, total_height - 30)
     elif detect_medical(source_name, full_check_text):

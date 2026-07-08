@@ -35,7 +35,7 @@ jobs:
           PYTHONUNBUFFERED: 1
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RUN_DURATION_SECONDS: "300"
+          RUN_DURATION_SECONDS: "120"
         run: python bot.py
 
       - name: ذخیره لیست خبرهای ارسال‌شده (جلوگیری از تکرار)

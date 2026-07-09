@@ -56,10 +56,15 @@ FOOTBALL_WORDS = ["فوتبال", "football", "جام جهانی", "world cup", 
 
 IRANIAN_SOURCES = {"ایسنا", "ایرنا", "ایران اینترنشنال"}
 
-IRAN_WORDS_FOR_CONFLICT = ["ایران", "iran", "تهران", "tehran"]
+IRAN_WORDS_FOR_CONFLICT = ["ایران", "iran", "تهران", "tehran", "اسرائیل", "israel",
+                           "عراق", "iraq", "سوریه", "syria", "اردن", "jordan",
+                           "بحرین", "bahrain", "آمریکا", "america"]
 CONFLICT_WORDS = [
     "جنگ", "حمله", "حمله نظامی", "بمباران", "بمب", "موشک", "پهپاد",
     "war", "attack", "strike", "strikes", "airstrike", "invasion", "military",
+    "آژیر", "siren", "جنگنده", "fighter jet", "حریم هوایی", "airspace",
+    "موشک کروز", "cruise missile", "نفتکش", "tanker",
+    "محاصره دریایی", "naval blockade", "فوری", "لحظه‌ای", "هم اکنون",
 ]
 
 _executor = ThreadPoolExecutor(max_workers=4)

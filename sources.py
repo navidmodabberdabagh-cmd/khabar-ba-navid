@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 RSS_FEEDS = {
+    "Sky News": "https://feeds.skynews.com/feeds/rss/world.xml",
     "Fox News": "https://moxie.foxnews.com/google-publisher/latest.xml",
     "Fox News World": "https://moxie.foxnews.com/google-publisher/world.xml",
     "DW English": "https://rss.dw.com/rdf/rss-en-all",
@@ -42,6 +43,10 @@ RSS_FEEDS = {
 }
 
 KEYWORDS = [
+    "اردن", "jordan", "سوریه", "syria", "آژیر", "siren",
+    "جنگنده", "fighter jet", "حریم هوایی", "airspace",
+    "موشک کروز", "cruise missile", "نفتکش", "oil tanker",
+    "محاصره دریایی", "naval blockade", "بندرعباس",
     "iran", "ایران", "tehran", "تهران", "trump", "ترامپ",
     "hezbollah", "حزب الله", "israel", "اسرائیل",
     "iraq", "عراق", "pakistan", "پاکستان", "afghanistan", "افغانستان",
